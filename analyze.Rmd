@@ -1,0 +1,320 @@
+---
+title: "Visualize Course Evaluations"
+author: "Daniel Lee"
+date: "March 29, 2018"
+output:
+  html_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+# Set the global option
+knitr::opts_chunk$set(message = F, warning = F, collapse = T, echo = F, results = 'hide')
+```
+
+While putting together my application for promotion to full professor, I thought why not visualize the progress I have made over the years in my teaching. Hence, I started writing this code. I tried to write the code in a way that is as general as possible so that the same code can be used regardless of the course or the year for which the course was taught. Note that the survey format at Plymouth State University has evolved over the years: for example, the survey format of 2018 is not entirely identical to that of 2014, including the survey questions.
+
+The student course evaluations (of Plymouth State University) were collected in the following manner. 
+
+1. Go myPlymouth -> myCourses -> CoursEval -> Reports -> Evaluation Reports
+2. Select `Show All` in all dropdown menus of the top line.
+3. Search Course Numer -> Contains -> 2550 (or your own course number)
+4. Click on Options, and uncheck every box possible (a few boxes have to be checked: No worrries about these boxes) except:
+    - Numeric Results: Include data tables only (No Graphs)
+    - Focus Options: All
+    - Core Statistics: Mean
+5. Scroll down and, under Evaluation Reports, check reports you want to download.
+6. Click PDF.
+7. Download and save it in a folder.
+8. Go File -> Export To -> Spreadsheet -> Microsoft Excel Workbook. 
+9. Open the Excel file you just saved, and go File -> Save As -> Save as type -> CSV (Comma delimited).
+10. Now you have three files with the same name but one in PDF, one in Excel Spreadsheet, and one in Excel Comma Separated Values File. 
+11. You will use the last saved CSV file for the analysis below. 
+
+
+
+## EC2550
+
+The chart below identifies the trends in course evaluations of EC2550: macroeconomics. This is a ideal course to show the progress I have made in teaching over the years because it's the one I have taught the most and for the longest period. 
+
+The chart shows the overall upward trend in student evaluation between 2013 and 2016.
+```{r}
+data <- read.csv("C:/Users/sclee1/OneDrive/Documents/Promotion and Tenure/Promotion/course eval/EC2550.csv", header = FALSE)
+
+# number of columns in the original data
+n_col <- ncol(data)
+n_col
+
+library(tidyverse)
+library(stringr)
+
+# Retrieve questions and ratings
+data_eval <-
+  data %>%
+  as_data_frame() %>%
+  filter(str_detect(V1, regex("Q\\d"))) %>%    #\\d matches any digit.
+  unite(Q_text, V2:V3, sep = "", remove = TRUE) %>%
+  unite(ratings, V4:paste0("V", n_col), sep = "", remove = TRUE) %>%   
+  #paste0("V", n_col) is the name of the last column
+  mutate(ratings = as.numeric(str_sub(ratings, str_length(ratings)-2, str_length(ratings)))) %>%
+  rename(Q_num = V1) 
+
+data_eval$Q_num <- factor(data_eval$Q_num, 
+                    ordered = TRUE, 
+                    levels = c("Q1","Q2","Q3","Q4","Q5","Q6","Q7","Q8","Q9","Q10",
+                               "Q11","Q12","Q13","Q14","Q15","Q16","Q17","Q18","Q19","Q20",
+                               "Q21","Q22","Q23","Q24","Q25","Q26","Q27","Q28","Q29"))
+data_eval
+summary(data_eval)
+str(data_eval)
+
+# number of questions
+n_Q <- length(unique(data_eval$Q_num))
+n_Q
+
+# Retrieve semester/year
+data_semester <-
+  data %>%
+  as_data_frame() %>%
+  filter(str_detect(V1, regex("Course & Instructor Feedback"))) %>%
+  select(V1) %>%
+  mutate(V1 = str_extract(V1, regex("([A-Z]{4,7}[ ](20[0-9]{2}))", ignore_case = TRUE)),
+         #reg expression extracts the pattern of, say, Spring 2017
+         semester = str_split(V1, " ", simplify = TRUE)[,1],
+         year = str_split(V1, " ", simplify = TRUE)[,2]) %>%
+  select(-V1)
+
+data_semester
+
+# semester and year should be repeated n_Q times b/c there are n_Q questions per term
+year <- factor(rep(data_semester$year, each = n_Q))
+semester <- factor(rep(data_semester$semester, each = n_Q), 
+                   ordered = TRUE, 
+                   levels=c("Winterim", "Spring", "Summer", "Fall"))
+data_semester <- data_frame(year, semester)
+
+str(data_semester)
+
+
+
+# Merge
+data <- cbind(data_semester, data_eval)
+str(data)
+summary(data)
+```
+
+
+```{r}
+# Calculate average ratings across all sections
+data %>%
+  group_by(year, Q_num) %>%
+  summarise(avg = mean(ratings))
+
+# Plot average ratings across all sections 
+data %>%
+  group_by(year, Q_num) %>%
+  summarise(avg = mean(ratings)) %>%
+  ggplot(aes(x = year, y = avg, fill = year)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~Q_num) + 
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Yearly Progress in Macroeconomics",
+       subtitle = "averages across all sections within the year",
+       x = NULL, 
+       y = "yearly average ratings")
+
+# Plot average ratings over all sections and all questions 
+data %>%
+  group_by(year) %>%
+  summarise(avg = mean(ratings)) %>%
+  ggplot(aes(x = year, y = avg, fill = year)) +
+  geom_col(show.legend = FALSE) + 
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Yearly Progress in Macroeconomics",
+       subtitle = "averages across all sections and all questions within the year",
+       x = NULL, 
+       y = "yearly average ratings")
+```
+
+```{r}
+# Extract survey questions
+data_eval %>%
+  select(1:2) %>%
+  data.frame()
+```
+
+Questions defined
+
+1. The criteria for grading were clearly stated.
+2. The course contributed to my intellectual growth.
+3. The course objectives were clear.
+4. To what degree did the course materials and activities meet the course description?
+5. The course stimulated my interest in the subject.
+6. ***How would you rate the overall value of the course?***
+7. The instructor demonstrates strong knowledge of subject matter.
+8. The instructor's use of technology was appropriate for the course.
+9. How much did the course add to your knowledge or skill in the subject?
+10. How challenging was this course?
+11. I have been aware that this course is part of the General Education Program of PSU.
+12. I have found this course relevant to my life.
+13. Please rate the extent to which the course addressed: Critical Thinking
+14. Please rate the extent to which the course addressed: Reading
+15. Please rate the extent to which the course addressed: Quantitative Reasoning
+16. Please rate the extent to which the course addressed: Writing
+17. Please rate the extent to which the course addressed: Speaking and Listening
+18. Please rate the extent to which the course addressed: Conducting Research
+19. Please rate the extent to which the course addressed: Working with Information Technology
+20. Please rate the extent to which the course addressed: Collaborating with Others
+21. Through this course, I have become aware that humans are interdependent members of a global community.
+22. This course has made me aware that there are both similarities and differences in societies and cultures of the world and that the manners in which people lead their lives need not be exactly alike.
+23. This course has exposed me to important societal issues facing the world and has encouraged me to think about such issues from different points of view.
+24. This course focused on events that have influenced peoples, cultures, nations, and regions of the world.
+25. In this course, I have gained knowledge and skills that will help me in other courses and in my profession.
+26. The instructor provided constructive feedback.
+27. ***How would you rate the overall effectiveness of the instructor?***
+28. The instructor provided timely feedback.
+29. The instructor encouraged student participation.
+
+
+
+
+## BU2240
+The same anlaysis can be done for other courses. I'm using BU2240: Business Statistics as an example to demonstrate this. The code below is identical for the one for macroeconomics above, except for the file name.
+
+However, the survey questions are not the same. It appears that some changes were made to the survey after the summer 2017.
+
+```{r}
+data <- read.csv("C:/Users/sclee1/OneDrive/Documents/Promotion and Tenure/Promotion/course eval/BU2240.csv", header = FALSE)
+
+# number of columns in the original data
+n_col <- ncol(data)
+n_col
+
+library(tidyverse)
+library(stringr)
+
+# Retrieve questions and ratings
+data_eval <-
+  data %>%
+  as_data_frame() %>%
+  filter(str_detect(V1, regex("Q\\d"))) %>%    #\\d matches any digit.
+  unite(Q_text, V2:V3, sep = "", remove = TRUE) %>%
+  unite(ratings, V4:paste0("V", n_col), sep = "", remove = TRUE) %>%   
+  #paste0("V", n_col) is the name of the last column
+  mutate(ratings = as.numeric(str_sub(ratings, str_length(ratings)-2, str_length(ratings)))) %>%
+  rename(Q_num = V1) 
+
+data_eval$Q_num <- factor(data_eval$Q_num, 
+                    ordered = TRUE, 
+                    levels = c("Q1","Q2","Q3","Q4","Q5","Q6","Q7","Q8","Q9","Q10",
+                               "Q11","Q12","Q13","Q14","Q15","Q16","Q17","Q18","Q19","Q20",
+                               "Q21","Q22","Q23","Q24","Q25","Q26","Q27","Q28","Q29"))
+data_eval
+summary(data_eval)
+str(data_eval)
+
+# number of questions
+n_Q <- length(unique(data_eval$Q_num))
+n_Q
+
+# Retrieve semester/year
+data_semester <-
+  data %>%
+  as_data_frame() %>%
+  filter(str_detect(V1, regex("Course & Instructor Feedback"))) %>%
+  select(V1) %>%
+  mutate(V1 = str_extract(V1, regex("([A-Z]{4,7}[ ](20[0-9]{2}))", ignore_case = TRUE)),
+         #reg expression extracts the pattern of, say, Spring 2017
+         semester = str_split(V1, " ", simplify = TRUE)[,1],
+         year = str_split(V1, " ", simplify = TRUE)[,2]) %>%
+  select(-V1)
+
+data_semester
+
+# semester and year should be repeated n_Q times b/c there are n_Q questions per term
+year <- factor(rep(data_semester$year, each = n_Q))
+semester <- factor(rep(data_semester$semester, each = n_Q), 
+                   ordered = TRUE, 
+                   levels=c("Winterim", "Spring", "Summer", "Fall"))
+data_semester <- data_frame(year, semester)
+
+str(data_semester)
+
+
+
+# Merge
+data <- cbind(data_semester, data_eval)
+str(data)
+summary(data)
+```
+
+
+```{r}
+# Calculate average ratings across all sections
+data %>%
+  group_by(year, Q_num) %>%
+  summarise(avg = mean(ratings))
+
+# Plot average ratings across all sections 
+data %>%
+  group_by(year, Q_num) %>%
+  summarise(avg = mean(ratings)) %>%
+  ggplot(aes(x = year, y = avg, fill = year)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~Q_num) + 
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Yearly Progress in Business Statistics",
+       subtitle = "averages across all sections within the year",
+       x = NULL, 
+       y = "yearly average ratings")
+
+# Plot average ratings over all sections and all questions 
+data %>%
+  group_by(year) %>%
+  summarise(avg = mean(ratings)) %>%
+  ggplot(aes(x = year, y = avg, fill = year)) +
+  geom_col(show.legend = FALSE) + 
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Yearly Progress in Business Statistics",
+       subtitle = "averages across all sections and all questions within the year",
+       x = NULL, 
+       y = "yearly average ratings")
+```
+
+```{r}
+# Extract survey questions
+data_eval %>%
+  select(1:2) %>%
+  data.frame()
+```
+
+Questions defined
+
+1. The criteria for grading were clearly stated.
+2. The course objectives were clear.
+3. The course contributed to my intellectual growth.
+4. To what degree did the course materials and activities meet the course description?
+5. The course stimulated my interest in the subject.
+6. ***How would you rate the overall value of the course?***
+7. The instructor demonstrates strong knowledge of subject matter.
+8. The instructor's use of technology was appropriate for the course.
+9. How much did the course add to your knowledge or skill in the subject?
+10. How challenging was this course?
+11. I have been aware that this course is part of the General Education Program of PSU.
+12. I have found this course relevant to my life.
+13. Please rate the extent to which the course addressed: Critical Thinking
+14. Please rate the extent to which the course addressed: Reading
+15. Please rate the extent to which the course addressed: Quantitative Reasoning
+16. Please rate the extent to which the course addressed: Writing
+17. Please rate the extent to which the course addressed: Speaking and Listening
+18. Please rate the extent to which the course addressed: Conducting Research
+19. Please rate the extent to which the course addressed: Working with Information Technology
+20. Please rate the extent to which the course addressed: Collaborating with Others
+21. This course has deepened my appreciation of the relevance of quantitative reasoning to us all.
+22. This course has caused me to recognize that my major discipline requires me to have quantitative reasoning skills.
+23. This course has taught me quantitative techniques and tools that I will be able to use in my major discipline.
+24. This course has taught me quantitative reasoning skills that are relevant to my life.
+25. The instructor provided constructive feedback.
+26. ***How would you rate the overall effectiveness of the instructor?***
+27. The instructor provided timely feedback.
+28. The instructor encouraged student participation.
