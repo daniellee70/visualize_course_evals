@@ -30,6 +30,7 @@ The student course evaluations (of Plymouth State University) were collected in 
 9. Open the Excel file you just saved, and go File -> Save As -> Save as type -> CSV (Comma delimited).
 10. Now you have three files with the same name but one in PDF, one in Excel Spreadsheet, and one in Excel Comma Separated Values File. 
 11. You will use the last saved CSV file for the analysis below. 
+12. The code used in the analysis can be found in my github account. Click [here](https://github.com/soungl/Visualizing-course-evals/blob/master/analyze.Rmd).
 
 
 
